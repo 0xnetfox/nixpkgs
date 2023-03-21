@@ -9,6 +9,40 @@
 , udev
 , zlib
 , protobuf
+, perl
+, validatorOnly ? false
+# Taken from https://github.com/solana-labs/solana/blob/master/scripts/cargo-install-all.sh#L84
+, solanaPkgs ? [
+    "solana"
+    "solana-bench-tps"
+    "solana-faucet"
+    "solana-gossip"
+    "solana-install"
+    "solana-keygen"
+    "solana-ledger-tool"
+    "solana-log-analyzer"
+    "solana-net-shaper"
+    "solana-sys-tuner"
+    "solana-validator"
+    "rbpf-cli"
+] ++ (lib.optionals (!validatorOnly) [
+    "cargo-build-bpf"
+    "cargo-test-bpf"
+    "solana-dos"
+    "solana-install-init"
+    "solana-stake-accounts"
+    "solana-test-validator"
+    "solana-tokens"
+    "solana-watchtower"
+
+    # Not yet available on mainnet
+    # "cargo-test-sbf"
+    # "cargo-build-sbf"
+]) ++ [
+    # XXX: Ensure `solana-genesis` is built LAST!
+    # See https://github.com/solana-labs/solana/issues/5826
+    "solana-genesis"
+  ]
 }:
 let
   pinData = lib.importJSON ./pin.json;
@@ -17,7 +51,7 @@ let
   cargoSha256 = pinData.cargoSha256;
 in
 rustPlatform.buildRustPackage rec {
-  pname = "solana-testnet-cli";
+  pname = "solana-cli";
   inherit version cargoSha256;
 
   src = fetchFromGitHub {
@@ -27,10 +61,13 @@ rustPlatform.buildRustPackage rec {
     inherit sha256;
   };
 
-  buildAndTestSubdir = "cli";
+  verifyCargoDeps = true;
+  cargoBuildFlags = builtins.map (n: "--bin=${n}") solanaPkgs;
 
-  nativeBuildInputs = lib.optionals stdenv.isLinux [ protobuf pkg-config ];
-  buildInputs = lib.optionals stdenv.isLinux [ udev zlib ] ++ lib.optionals stdenv.isDarwin [ IOKit Security AppKit ];
+
+  nativeBuildInputs = [ pkg-config protobuf perl ];
+  buildInputs = lib.optionals stdenv.isLinux [ udev zlib ]
+                ++ lib.optionals stdenv.isDarwin [ IOKit Security AppKit ];
 
   # check phase fails
   # on darwin with missing framework System. This framework is not available in nixpkgs
@@ -51,7 +88,7 @@ rustPlatform.buildRustPackage rec {
   # ROCKSDB_LIB_DIR="${rocksdb}/lib";
 
   meta = with lib; {
-    description = "Web-Scale Blockchain for fast, secure, scalable, decentralized apps and marketplaces. ";
+    description = "Web-Scale Blockchain for fast, secure, scalable, decentralized apps and marketplaces.";
     homepage = "https://solana.com";
     license = licenses.asl20;
     maintainers = with maintainers; [ happysalada ];
